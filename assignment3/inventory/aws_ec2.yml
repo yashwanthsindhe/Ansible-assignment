@@ -1,0 +1,16 @@
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-1
+
+filters:
+  instance-state-name: running
+
+keyed_groups:
+  - key: tags.Name
+    prefix: name
+  - key: instance_type
+    prefix: type
+
+hostnames:
+  - ip-address

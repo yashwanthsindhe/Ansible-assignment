@@ -1,0 +1,13 @@
+---
+- name: Display EC2 IP address
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - name: Show EC2 hostname
+      debug:
+        msg: "Hostname: {{ inventory_hostname }}"
+
+    - name: Show private IP address
+      debug:
+        msg: "Private IP: {{ ansible_default_ipv4.address }}"
