@@ -1,0 +1,19 @@
+---
+- name: Generate Target Instances Report
+  hosts: host
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Display instance report
+      debug:
+        msg:
+          - "======================================"
+          - "        TARGET INSTANCE REPORT"
+          - "======================================"
+          - "Hostname  : {{ ansible_hostname }}"
+          - "CPU Cores : {{ ansible_processor_vcpus }}"
+          - "RAM       : {{ ansible_memtotal_mb }} MB"
+          - "Storage   : {{ ansible_mounts[0].size_total | human_readable }}"
+          - "======================================"

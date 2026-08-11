@@ -1,0 +1,37 @@
+---
+- name: Install and configure Tomcat
+  hosts: host
+  become: true
+
+  tasks:
+
+    - name: Install Java
+      apt:
+        name: openjdk-17-jdk
+        state: present
+        update_cache: true
+
+    - name: Install Tomcat
+      apt:
+        name: tomcat10
+        state: present
+
+    - name: Change Tomcat port from 8080 to 9090
+      replace:
+        path: /etc/tomcat10/server.xml
+        regexp: 'port="8080"'
+        replace: 'port="9090"'
+      notify: Restart Tomcat
+
+    - name: Ensure Tomcat is started and enabled
+      service:
+        name: tomcat10
+        state: started
+        enabled: true
+
+  handlers:
+
+    - name: Restart Tomcat
+      service:
+        name: tomcat10
+        state: restarted
