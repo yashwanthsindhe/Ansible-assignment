@@ -1,17 +1,17 @@
-# Tomcat Application Deployment Using Ansible
+# Tomcat Application Deployment Using Ansible Roles
 
 ## Objective
 
-The objective of this deployment is to safely deploy a new version of a WAR application on a Tomcat server.
+The objective of this assignment is to deploy a new version of a Tomcat WAR application using **Ansible Roles**.
 
-The deployment process follows these steps:
+The deployment process performs the following steps:
 
 ```text
 Stop Tomcat
      ↓
-Backup Existing WAR File
+Backup Existing WAR
      ↓
-Deploy New WAR File
+Deploy New WAR
      ↓
 Start Tomcat
      ↓
@@ -20,91 +20,248 @@ Check Application Health
 
 ---
 
-## Deployment Steps
-
-### Step 1: Stop Tomcat Service
-
-Before deploying the new application, stop the Tomcat service.
-
-```bash
-sudo systemctl stop tomcat10
-```
-
-Verify that Tomcat has stopped:
-
-```bash
-sudo systemctl status tomcat10
-```
-
-Expected:
+## Project Structure
 
 ```text
-Active: inactive (dead)
+assignment4/
+├── ansible.cfg
+├── host
+├── deploy.yml
+├── myapp.war
+├── README.md
+└── roles/
+    └── deployment/
+        ├── tasks/
+        │   └── main.yml
+        ├── handlers/
+        │   └── main.yml
+        ├── files/
+        │   └── myapp.war
+        ├── templates/
+        ├── vars/
+        │   └── main.yml
+        └── defaults/
+            └── main.yml
 ```
 
 ---
 
-### Step 2: Backup Existing Application
+# Step 1: Create the Role
 
-Create a backup directory:
-
-```bash
-sudo mkdir -p /opt/tomcat/backup
-```
-
-Copy the existing WAR file to the backup directory:
+Create the deployment role:
 
 ```bash
-sudo cp /opt/tomcat/webapps/myapp.war /opt/tomcat/backup/myapp.war
-```
-
-Verify the backup:
-
-```bash
-ls -lh /opt/tomcat/backup/
-```
-
-Example:
-
-```text
--rw-r--r-- 1 root root 25M Aug 11 15:30 myapp.war
-```
-
-The existing application is now backed up before deploying the new version.
-
----
-
-### Step 3: Deploy New WAR File
-
-Copy the new WAR file to the Tomcat `webapps` directory:
-
-```bash
-sudo cp myapp.war /opt/tomcat/webapps/myapp.war
+ansible-galaxy init roles/deployment
 ```
 
 Verify:
 
 ```bash
-ls -lh /opt/tomcat/webapps/myapp.war
+ls roles/deployment
+```
+
+You should see:
+
+```text
+defaults
+files
+handlers
+meta
+README.md
+tasks
+templates
+tests
+vars
 ```
 
 ---
 
-### Step 4: Start Tomcat
+# Step 2: Add the WAR File
 
-Start the Tomcat service:
-
-```bash
-sudo systemctl start tomcat10
-```
-
-Enable Tomcat at system startup:
+Copy the new WAR file into the role's `files` directory:
 
 ```bash
-sudo systemctl enable tomcat10
+cp myapp.war roles/deployment/files/
 ```
 
-Check the service:
+Verify:
+
+```bash
+ls -lh roles/deployment/files/
+```
+
+Expected:
+
+```text
+myapp.war
+```
+
+---
+
+# Step 3: Create Role Tasks
+
+Edit:
+
+```bash
+nano roles/deployment/tasks/main.yml
+```
+
+Add:
+
+```yaml
+---
+- name: Stop Tomcat
+  service:
+    name: tomcat10
+    state: stopped
+
+- name: Create backup directory
+  file:
+    path: /opt/tomcat/backup
+    state: directory
+    mode: '0755'
+
+- name: Check if existing WAR file exists
+  stat:
+    path: /opt/tomcat/webapps/myapp.war
+  register: existing_war
+
+- name: Backup existing WAR file
+  copy:
+    src: /opt/tomcat/webapps/myapp.war
+    dest: /opt/tomcat/backup/myapp.war.backup
+    remote_src: true
+  when: existing_war.stat.exists
+
+- name: Remove old WAR file
+  file:
+    path: /opt/tomcat/webapps/myapp.war
+    state: absent
+
+- name: Deploy new WAR file
+  copy:
+    src: myapp.war
+    dest: /opt/tomcat/webapps/myapp.war
+    owner: tomcat
+    group: tomcat
+    mode: '0644'
+
+- name: Start Tomcat
+  service:
+    name: tomcat10
+    state: started
+    enabled: true
+
+- name: Wait for Tomcat port
+  wait_for:
+    host: 127.0.0.1
+    port: 9090
+    delay: 5
+    timeout: 60
+
+- name: Check application health
+  uri:
+    url: http://127.0.0.1:9090/myapp/
+    status_code: 200
+  register: application_health
+
+- name: Display application health
+  debug:
+    msg: "Application is healthy. HTTP status: {{ application_health.status }}"
+```
+
+---
+
+# Step 4: Create the Main Playbook
+
+Create:
+
+```bash
+nano deploy.yml
+```
+
+Add:
+
+```yaml
+---
+- name: Deploy Tomcat Application
+  hosts: all
+  become: true
+
+  roles:
+    - deployment
+```
+
+The playbook calls the `deployment` role.
+
+---
+
+# Step 5: Check Role Syntax
+
+Run:
+
+```bash
+ansible-playbook --syntax-check deploy.yml
+```
+
+Expected:
+
+```text
+playbook: deploy.yml
+```
+
+---
+
+# Step 6: Test Ansible Connectivity
+
+```bash
+ansible all -m ping
+```
+
+Expected:
+
+```text
+server1 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+---
+
+# Step 7: Run the Deployment
+
+Run:
+
+```bash
+ansible-playbook deploy.yml
+```
+
+The role performs:
+
+```text
+Stop Tomcat
+     ↓
+Create Backup Directory
+     ↓
+Backup Existing WAR
+     ↓
+Remove Old WAR
+     ↓
+Deploy New WAR
+     ↓
+Start Tomcat
+     ↓
+Wait for Port 9090
+     ↓
+Health Check
+```
+
+---
+
+# Step 8: Verify Tomcat
+
+On the target server:
 
 ```bash
 sudo systemctl status tomcat10
@@ -118,15 +275,53 @@ Active: active (running)
 
 ---
 
-### Step 5: Check Application Health
-
-Check whether Tomcat is listening on its configured port:
+# Step 9: Verify Tomcat Port
 
 ```bash
 sudo ss -tlnp | grep 9090
 ```
 
-Test the application locally:
+Expected:
+
+```text
+LISTEN 0 100 0.0.0.0:9090
+```
+
+---
+
+# Step 10: Verify Backup
+
+Check the backup directory:
+
+```bash
+ls -lh /opt/tomcat/backup/
+```
+
+Expected:
+
+```text
+myapp.war.backup
+```
+
+---
+
+# Step 11: Verify New WAR
+
+```bash
+ls -lh /opt/tomcat/webapps/
+```
+
+Expected:
+
+```text
+myapp.war
+```
+
+---
+
+# Step 12: Check Application Health
+
+Run:
 
 ```bash
 curl -I http://localhost:9090/myapp/
@@ -138,241 +333,73 @@ Expected:
 HTTP/1.1 200
 ```
 
-A `200 OK` response indicates that the application is responding successfully.
+The Ansible `uri` task also performs this health check automatically.
 
-You can also access the application from a browser:
+Example:
 
 ```text
-http://<EC2-PUBLIC-IP>:9090/myapp/
+Application is healthy. HTTP status: 200
 ```
 
 ---
 
-# Ansible Deployment Playbook
+# Deployment Role Advantages
 
-Create the deployment playbook:
+Using an Ansible Role provides:
 
-```bash
-nano deploy.yml
-```
-
-Use:
-
-```yaml
----
-- name: Deploy new Tomcat application
-  hosts: all
-  become: true
-
-  vars:
-    tomcat_service: tomcat10
-    tomcat_webapps: /opt/tomcat/webapps
-    backup_dir: /opt/tomcat/backup
-    app_name: myapp
-    war_file: myapp.war
-    tomcat_port: 9090
-
-  tasks:
-
-    - name: Stop Tomcat
-      service:
-        name: "{{ tomcat_service }}"
-        state: stopped
-
-    - name: Create backup directory
-      file:
-        path: "{{ backup_dir }}"
-        state: directory
-        mode: '0755'
-
-    - name: Backup existing WAR file
-      copy:
-        src: "{{ tomcat_webapps }}/{{ war_file }}"
-        dest: "{{ backup_dir }}/{{ war_file }}.backup"
-        remote_src: true
-      when: >
-        (tomcat_webapps + '/' + war_file) is file
-
-    - name: Remove old WAR file
-      file:
-        path: "{{ tomcat_webapps }}/{{ war_file }}"
-        state: absent
-
-    - name: Deploy new WAR file
-      copy:
-        src: "{{ war_file }}"
-        dest: "{{ tomcat_webapps }}/{{ war_file }}"
-        owner: tomcat
-        group: tomcat
-        mode: '0644'
-
-    - name: Start Tomcat
-      service:
-        name: "{{ tomcat_service }}"
-        state: started
-        enabled: true
-
-    - name: Wait for Tomcat port
-      wait_for:
-        host: 127.0.0.1
-        port: "{{ tomcat_port }}"
-        delay: 5
-        timeout: 60
-
-    - name: Check application health
-      uri:
-        url: "http://127.0.0.1:{{ tomcat_port }}/{{ app_name }}/"
-        status_code: 200
-      register: health_check
-
-    - name: Display health status
-      debug:
-        msg: "Application {{ app_name }} is healthy and responding with HTTP {{ health_check.status }}"
-```
-
----
-
-# Playbook Execution
-
-Before running the deployment, make sure the new WAR file is available on the Ansible controller:
-
-```bash
-ls -lh myapp.war
-```
-
-Check the playbook syntax:
-
-```bash
-ansible-playbook --syntax-check deploy.yml
-```
-
-Run the deployment:
-
-```bash
-ansible-playbook deploy.yml
-```
+* Reusable deployment logic
+* Organized project structure
+* Easy maintenance
+* Separation of tasks
+* Easy rollback
+* Suitable for organization-level automation
 
 ---
 
 # Deployment Flow
 
 ```text
-              New WAR File
-                   |
-                   ↓
-            Stop Tomcat
-                   |
-                   ↓
-       Backup Existing WAR
-                   |
-                   ↓
-          Remove Old WAR
-                   |
-                   ↓
-          Deploy New WAR
-                   |
-                   ↓
-            Start Tomcat
-                   |
-                   ↓
-          Wait for Port 9090
-                   |
-                   ↓
-       Application Health Check
-                   |
-                   ↓
-              HTTP 200 OK
-```
-
----
-
-# Verification Commands
-
-### Check Tomcat
-
-```bash
-sudo systemctl status tomcat10
-```
-
-### Check Tomcat port
-
-```bash
-sudo ss -tlnp | grep 9090
-```
-
-### Check deployed WAR
-
-```bash
-ls -lh /opt/tomcat/webapps/
-```
-
-### Check backup
-
-```bash
-ls -lh /opt/tomcat/backup/
-```
-
-### Check application
-
-```bash
-curl -I http://localhost:9090/myapp/
-```
-
----
-
-# Rollback
-
-If the new application fails, stop Tomcat:
-
-```bash
-sudo systemctl stop tomcat10
-```
-
-Remove the new WAR:
-
-```bash
-sudo rm -f /opt/tomcat/webapps/myapp.war
-```
-
-Restore the backup:
-
-```bash
-sudo cp /opt/tomcat/backup/myapp.war.backup /opt/tomcat/webapps/myapp.war
-```
-
-Start Tomcat:
-
-```bash
-sudo systemctl start tomcat10
-```
-
-Check:
-
-```bash
-sudo systemctl status tomcat10
-```
-
-Test:
-
-```bash
-curl -I http://localhost:9090/myapp/
+                 Ansible Controller
+                        |
+                        ↓
+                  deploy.yml
+                        |
+                        ↓
+                deployment role
+                        |
+          ┌─────────────┴─────────────┐
+          ↓                           ↓
+    Stop Tomcat                  Backup WAR
+          |                           |
+          └─────────────┬─────────────┘
+                        ↓
+                  Deploy New WAR
+                        |
+                        ↓
+                   Start Tomcat
+                        |
+                        ↓
+                Health Check :9090
+                        |
+                        ↓
+                     HTTP 200
 ```
 
 ---
 
 # Result
 
-The deployment successfully performs the following operations:
+The Tomcat application was successfully deployed using an Ansible Role.
 
-1. Stops Tomcat.
-2. Creates a backup of the existing WAR file.
-3. Removes the old application.
-4. Deploys the new WAR file.
-5. Starts Tomcat.
-6. Waits for the Tomcat port.
-7. Performs an application health check.
-8. Confirms the application with an HTTP `200 OK` response.
+The deployment process:
+
+* Stopped the Tomcat service.
+* Backed up the existing WAR file.
+* Deployed the new WAR file.
+* Started Tomcat.
+* Verified the Tomcat port.
+* Checked the health of the deployed application.
 
 ## Conclusion
 
-This deployment process provides a simple and safe way to deploy a new version of a Tomcat application using Ansible while maintaining a backup for rollback.
+Ansible Roles provide a clean and reusable way to automate application deployments. The role can be reused for future WAR deployments by changing the application name or WAR file.
