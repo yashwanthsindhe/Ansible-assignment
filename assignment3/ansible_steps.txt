@@ -1,0 +1,88 @@
+Ansible Dynamic inventory
+Dynamic Inventory means Ansible automatically gets the list of servers/EC2 instances from an external source instead of you manually writing their IP addresses in an inventory file.
+
+For example, with a static inventory you write:
+
+[webservers]
+54.123.45.67
+54.123.45.68
+
+Steps to Create AWS Dynamic Inventory
+
+Step 1: Install the AWS collection
+	--> ansible-galaxy collection install amazon.aws
+
+Also install the AWS SDK:
+
+sudo apt update
+sudo apt install python3-boto3 python3-botocore -y
+
+Step 2: Configure AWS credentials
+ 	--> in IAM roles give permmision to the AWS-adminstrative-full-access
+	--> attach to the instance.
+	--> install AWS-CLI in terminal
+
+Step 3: Create the dynamic inventory file
+	--> vim aws_ec2.yml
+
+put: 
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-1
+
+filters:
+  instance-state-name: running
+
+keyed_groups:
+  - key: tags.Name
+    prefix: tag_name
+  - key: tags.Ansible
+    prefix: tag_ansible
+
+Step 4: Test the dynamic inventory
+
+	--> ansible-inventory -i aws_ec2.yaml --graph
+
+You should see something similar to:
+
+@all:
+  |--@aws_ec2:
+  |  |--ec2-98-81-9-66.compute-1.amazonaws.com
+  |--@tag_ansible_dynamic:
+  |  |--ec2-98-81-9-66.compute-1.amazonaws.com
+
+Step 5: View complete inventory information
+
+	--> ansible-inventory -i aws_ec2.yaml --list
+
+Step 6: Test Ansible connectivity
+
+ 	--> ansible all -i aws_ec2.yaml -m ping
+
+Step 7: Use Dynamic Inventory in a Playbook
+
+	--> vim nginx.yml
+
+---
+- name: Install Nginx on EC2
+  hosts: tag_ansible_dynamic
+  become: yes
+
+  tasks:
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Start Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+Step 8: Run this command
+
+	--> ansible-playbook -i aws_ec2.yaml nginx.yml
+

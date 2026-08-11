@@ -1,0 +1,49 @@
+Ansible Vault is used to encrypt sensitive data such as database passwords, API keys, and credentials.
+
+Step 1: Create a Vault file
+	--> ansible-vault create secrets.yml
+
+Step 2: Add secret variables
+	---> db_username: admin
+ 	     db_password: MySecret123
+
+Step 3: Verify the encrypted file
+	---> cat secrets.yml
+	---> ***********
+
+Step 4: Create your playbook
+
+playbook.yml:
+
+---
+- name: Test Ansible Vault
+  hosts: all
+  become: yes
+
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - name: Show database username
+      ansible.builtin.debug:
+        msg: "Database user is {{ db_username }}"
+
+    - name: Show database password
+      ansible.builtin.debug:
+        msg: "Database password is {{ db_password }}"
+
+Step 5: Run the playbook
+ 	---> ansible-playbook -i inventory playbook.yml --ask-vault-pass
+	     It will ask:
+             Vault password:
+
+Step 6: Expected output
+	----> TASK [Show database username]
+ok: [54.174.46.25] => {
+    "msg": "Database user is admin"
+}
+
+TASK [Show database password]
+ok: [54.174.46.25] => {
+    "msg": "Database password is MySecret123"
+}
